@@ -1,0 +1,6 @@
+include ':app'
+include ':my-react-native-lib'
+rootProject.name = "MyReactNativeAppBridge"
+include ':react-native'
+include ':jsc-android'
+apply from: file("../node_modules/@react-native-community/cli-platform-android/native_modules.gradle"); applyNativeModulesSettingsGradle(settings)

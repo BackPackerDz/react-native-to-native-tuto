@@ -1,0 +1,116 @@
+import groovy.json.JsonSlurper
+
+// Top-level build file where you can add configuration options common to all sub-projects/modules.
+buildscript {
+    ext.kotlin_version = '1.5.30-M1'
+    repositories {
+        google()
+        jcenter()
+    }
+    dependencies {
+        classpath "com.android.tools.build:gradle:4.1.0"
+        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
+
+        // NOTE: Do not place your application dependencies here; they belong
+        // in the individual module build.gradle files
+    }
+}
+
+
+allprojects {
+    group = "com.appfiza.android"
+    version = "1.0.0"
+    repositories {
+        google()
+        jcenter()
+        maven {
+            // All of React Native (JS, Android binaries) is installed from npm
+            url "$rootDir/../node_modules/react-native/android"
+        }
+        maven {
+            // Android JSC is installed from npm
+            url("$rootDir/../node_modules/jsc-android/dist")
+        }
+        maven { url "https://www.jitpack.io" }
+    }
+}
+
+subprojects {
+    apply plugin: "maven-publish"
+    project.afterEvaluate {
+        if (!plugins.hasPlugin("android")) {
+            publishing {
+                publications {
+                    release(MavenPublication) {
+                        afterEvaluate {
+                            artifactId = project.name
+                            if (plugins.hasPlugin("java")) {
+                                from components.java
+                            } else if (plugins.hasPlugin("android-library")) {
+                                def generalRelease = components.find { it.name == "generalRelease" }
+                                if (generalRelease != null) from generalRelease else from components.release
+                                tasks.withType(GenerateModuleMetadata) { enabled = false }
+                                pom.withXml {
+                                    def hasDependencies = !asNode().dependencies.isEmpty()
+                                    if (hasDependencies) {
+                                        asNode().dependencies.first().each {
+                                            def groupId = it.get("groupId").first().value().first()
+                                            if (groupId == "com.facebook.react") {
+                                                it.get("groupId").first().value = "com.appfiza.android"
+                                                it.get("artifactId").first().value = "react-native"
+                                                it.get("version").first().value = version
+                                            }
+                                            if (groupId == "org.webkit") {
+                                                it.get("groupId").first().value = "com.appfiza.android"
+                                                it.get("artifactId").first().value = "jsc-android"
+                                                it.get("version").first().value = version
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            /**
+                             *  To publish libraries that have aar files
+                             */
+                            else {
+
+                                if (project.name == "jsc-android") {
+                                    artifact(file("$projectDir/android-jsc-r245459.aar"))
+                                } else if (project.name == "react-native") {
+                                    artifact(file("$projectDir/react-native-0.64.2.aar"))
+                                } else {
+                                    def inputFile = new File(projectDir, '../../react-native/package.json')
+                                    def json = new JsonSlurper().parseText(inputFile.text)
+                                    def reactNativeVersion = json.version as String
+                                    def (major, minor, patch) = reactNativeVersion.tokenize('.')
+                                    def engine = "jsc"
+                                    if (project(':app').ext.react.enableHermes) {
+                                        engine = "hermes"
+                                    }
+                                    artifact(file("../node_modules/$project.name/android/react-native-reanimated-${minor}-${engine}.aar"))
+                                }
+                            }
+                        }
+                    }
+                }
+                repositories {
+                    maven {
+                        url = getRepositoryUrl()
+                        credentials {
+                            username = System.getenv('GITHUB_USER')
+                            password = System.getenv('GITHUB_TOKEN')
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+def getRepositoryUrl() {
+    return "https://maven.pkg.github.com/"
+}
+
+task clean(type: Delete) {
+    delete rootProject.buildDir
+}
